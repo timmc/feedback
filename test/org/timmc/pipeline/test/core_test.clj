@@ -32,17 +32,19 @@
   [f]
   (zero? (mod f 2)))
 
-(pl/create
- [:a :b :c :e]
- [:e]
- :A A [:f1 :e] :a
- :B B [:f2] :b
- :C C [:a :b] :c
- :D D [:a :b] :d
- :E E [:d] :e
- :F F [:c] {:f1 F1 :f2 identity})
+(let [p (pl/create
+         [:a :b :c :e]
+         [:e]
+         :A A [:f1 :e] :a
+         :B B [:f2] :b
+         :C C [:a :b] :c
+         :D D [:a :b] :d
+         :E E [:d] :e
+         :F F [:c] {:f1 F1 :f2 identity})
+      p (pl/initialize p {:a 0 :b 1})]
+  (println p))
 
-(pl/initialize :a 0 :b 1)
+
 
 #_
 (pl/create

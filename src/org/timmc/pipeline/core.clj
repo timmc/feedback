@@ -1,100 +1,160 @@
-(ns org.timmc.pipeline
+(ns org.timmc.pipeline.core
   "Logic pipeline manager.
 
-   Specify a collection of control blocks and registers, then advance the
-   state of the world one clock cycle at a time. Query the halt? function
-   to determine when the computation is finished.")
+   Specify a collection of logic blocks and registers, then advance the
+   state of the world one clock cycle at a time.
+
+   Each logic block is declared to take inputs from named wires and produce
+   outputs on other named wires. (Values are not restricted to booleans or
+   numbers; they are arbitrary.) The block is specified with a function that
+   takes the values on the input wires in their declared order and produces
+   a single output. From there, the unary output functions turn that value
+   into the values that will be placed on their named outputs. There is a
+   convenience syntax for having a single passthrough output function.
+   
+   Registers are named after wires they take their values from, and only
+   advance on each clock cycle. To initialize the pipeline, all registers must
+   be given initial values. After that, the step function may be used.
+
+   Each clock cycle is atomic. The Pipeline object returned from create or step
+   will have values on output wires that are consistent with the input to their
+   logic blocks, with register values being used in place of wire values for
+   inputs that name them.
+
+   There are currently no checks for the sanity of the pipeline you construct.
+   A) If you specify named wires or registers that do not match inputs or
+      outputs, you may receive unexpected nil values or even exceptions.
+   B) If you have an inconsistent number of registers along any two datapaths,
+      you will not be warned.
+   C) If you manage to construct a cycle of blocks that is not broken up by
+      registers, you will almost certainly encounter an infinite loop when you
+      run the pipeline.
+   Future versions of this utility may check for cases A and C."
+  (require [clojure.set :as set]))
 
 ;;;; Implementation
 
 (defrecord ^{:doc "A single logic block."}
     Block
   [
-   ^{:doc "Core processing function"}
+   ^{:doc "Names of inputs in order, as a vector."}
+   inputs
+   ^{:doc "Core processing function, which takes the inputs in order."}
    process
-   ^{:doc "Map of registers to output functions"}
+   ^{:doc "Map of output names to unary functions, each of which takes the
+           output of .process as input."}
    outputs
-   ^{:doc "Whether this is a :halt block."}
-   halt?
    ])
 
 (defrecord ^{:doc "Implementation for pipeline methods."}
     Pipeline
   [
-   ^{:doc "Map of registers to their values."}
+   ^{:doc "Map of wire names to values."}
+   wires
+   ^{:doc "Map of register names to values."}
    registers
-   ^{:doc "Map of keys of init registers to their initial values."}
-   initials
-   ^{:doc "Map of name keys to Block records."}
+   ^{:doc "Map of block names to Block records."}
    blocks
-   ^{:doc "Vector of keys of halt blocks."}
-   halts
-   ^{:doc "True if Pipeline has been initialized."}
-   started?
+   ^{:doc "True if Pipeline has been initialized (flushed with good data.)"}
+   initialized?
    ])
 
-;;;; Constants
+;;;; Accessors
 
-(def ^{:doc "Option keyword indicating a halt block."}
-  sig-halt :halt)
+(defn- require-init
+  "Throw error if not initialized, running the thunk to get an action name
+   for the message."
+  [^Pipeline p, action-name-thunk]
+  (when-not (.initialized? p)
+    (throw (IllegalStateException.
+            (str "Cannot " (action-name-thunk) " before initialization.")))))
 
-(def ^{:doc "Option keyword indicating an initialization block."}
-  sig-init :init)
+(defn peek-register
+  "Return value in register, if initialized."
+  [^Pipeline p, reg-kw]
+  (require-init #(str "peek register " (name reg-kw)))
+  (-> p (.registers) reg-kw))
 
-;;;; Construction
-
-(defn validate
-  "Throw an error if this pipeline is inconsistent."
-  [^Pipeline p]
-  ;; TODO consistency check for Pipeline
-  )
-
-(defn- add-unchecked
-  "Unchecked addition of a logic block.")
-
-(defn add
-  "Define a logic block, its dependencies, and its exports.
-   - name: a keyword naming this logic block uniquely
-   - f: function that receives the dependency values as arguments in order
-   - exports: a map of keywords (naming registers) to functions that will
-     take the return value of f and produce values for those registers.
-     Alternatively, a single bare keyword can be provided, and will be treated
-     as {kw identity}
-   - options: keywords that mark this logic block as having special properties.
-     Legal values: :halt and :init (described in namespace docs.)"
-  [^Pipeline p, name, f, depends, exports, & options]
-  
-  (Pipeline. (into (.registers p) )
-             false))
-
-(defn create
-  "Create a Pipeline with the specified blocks. Each argument must be a vector
-   containing the args one would pass to add."
-  [& blocks]
-  (reduce #(apply add %1 %2)
-          (Pipeline. {} {} {} [] false)
-          blocks))
-
-(defn initialize
-  "Load initialization registers and flush them through the logic pipeline.
-   The resulting Pipeline is in a consistent state and ready to run."
-  [& init-pairs]
-  ;; TODO: determine necessary cycle count n
-  ;; TODO: n times: step-unchecked once, reset init registers
-  ;; TODO: mark initialized
-  )
+(defn peek-wire
+  "Return value on wire, if initialized."
+  [^Pipeline p, wire-kw]
+  (require-init #(str "peek wire " (name wire-kw)))
+  (-> p (.wires) wire-kw))
 
 ;;;; Running
 
-(defn step
+(defn- ^Block find-input-block
+  "Find the source logic block for the named wire.
+   If there is a register on this wire, return nil."
+  [^Pipeline p, wire-kw]
+  (if (contains? (.registers p) wire-kw)
+    nil
+    (some #(contains? (.outputs ^Block %) wire-kw) (.blocks p))))
+
+(defn- ^Pipeline compute-1
+  "Compute the new outputs of one block. Assumes dependencies are clean."
+  [^Pipeline p, ^Block b]
+  (let [main-val (apply (.process b) (replace (.wires p) (.inputs b)))
+        out-vals ((juxt (vals (.outputs b))) main-val)]
+    (update-in p [:wires] (partial map assoc) (keys (.outputs b)) out-vals)))
+
+(defn- ^Pipeline compute-wires-worklist
+  "Use worklist to perform actual work for compute-wires.
+   `remaining` is the set of wire names left to compute."
+  [^Pipeline p, remaining]
+  (if-let [wire (first (seq remaining))]
+    (if-let [block (find-input-block p wire)]
+      (let [inputs (.inputs block)]
+        (if (empty? (set/intersection (set (keys inputs)) remaining))
+          (recur (compute-1 p block) (disj remaining wire))
+          ;; TODO case where dependencies not met
+          )))
+    p))
+
+(defn- ^Pipeline compute-wires
+  "Recompute the wire values on a dirty pipeline."
+  [^Pipeline p]
+  (compute-wires-worklist (set (keys (.wires p)))))
+
+(defn ^Pipeline reset
+  "Set new values for 0 or more registers (as a map of name keys to values)
+   and compute the new wire values."
+  [^Pipeline p, regsets]
+  (compute-wires (update-in p [:registers] merge regsets)))
+
+(defn ^Pipeline step
   "Step the simulation forward by one cycle."
   [^Pipeline p]
-  (let [old (.registers p)]
-    (.blocks p)))
+  (let [newregs (select-keys (.wires p) (keys (.registers p)))]
+    (compute-wires (assoc-in p [:registers] newregs))))
 
-;;; components:
+;;;; Construction
 
-;;; Need a way to hold :state for x clock cycles.
-;;; If the dependencies are explicit, can compute x.
+(defn ^Pipeline add
+  "Define a logic block, its inputs, functions, and outputs.
+   - name: a keyword naming this logic block uniquely
+   - f: function that receives the input values as arguments in order
+   - inputs: a collection of keywords naming wires to be use as inputs to f
+   - outputs: a map of keywords (naming own outputs) to functions that will
+     take the return value of f and produce values for output.
+     Alternatively, a single bare keyword can be provided, and will be treated
+     as {kw identity}"
+  [^Pipeline p, name, f, inputs, outputs]
+  (let [outputs (if (seq? outputs) outputs {outputs identity})]
+    ;; FIXME: should really add wire names in at this point
+    (assoc-in p [:blocks name] (Block. inputs f outputs))))
 
-;;; Need to make explicit which components are state and halt.
+(defn ^Pipeline initialize
+  "Initialize a pipeline by specifying all registers (using a map of
+   register name keys to initial values) and updating the wire values.
+   The resulting pipeline is ready to be used."
+  [^Pipeline p, init-pairs]
+  (assoc-in (reset p init-pairs) [:initialized?] true))
+
+(defn ^Pipeline create
+  "Create a Pipeline, optionally with the specified logic blocks, each being
+   the same collection that `add` accepts as arguments."
+  [& blocks]
+  (reduce #(apply add %1 %2)
+          (Pipeline. {} {} {} false)
+          blocks))
