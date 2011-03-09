@@ -10,7 +10,8 @@
    takes the values on the input wires in their declared order and produces
    a single output. From there, the unary output functions turn that value
    into the values that will be placed on their named outputs. There is a
-   convenience syntax for having a single passthrough output function.
+   convenience syntax for having a single passthrough output function. The block
+   name is not used for anything other than logging and debugging.
    
    Registers are named after wires they take their values from, and only
    advance on each clock cycle. To initialize the pipeline, all registers must
@@ -19,18 +20,20 @@
    Each clock cycle is atomic. The Pipeline object returned from create or step
    will have values on output wires that are consistent with the input to their
    logic blocks, with register values being used in place of wire values for
-   inputs that name them.
+   inputs that name them. Note that a wire and a register with the same name
+   will most likely not have the same value. However, the register's next value
+   will be the wire's current value.
 
-   There are currently no checks for the sanity of the pipeline you construct.
-   A) If you specify named wires or registers that do not match inputs or
-      outputs, you may receive unexpected nil values or even exceptions.
-   B) If you have an inconsistent number of registers along any two datapaths,
-      you will not be warned.
-   C) If you manage to construct a cycle of blocks that is not broken up by
-      registers, you will almost certainly encounter an infinite loop when you
-      run the pipeline.
-   Future versions of this utility may check for cases A and C."
-  (require [clojure.set :as set]))
+   There are currently no checks for the sanity of the pipeline you construct,
+   besides ensuring that there are no loops of logic blocks that are not
+   broken up by registers. If you specify named wires or registers that do not
+   match inputs or outputs, you may receive unexpected nil values or even
+   exceptions. (Future versions of this utility may check for this condition.)
+   If you have an inconsistent number of registers along any two datapaths,
+   you will not be warned. (This is sometimes an intentional design decision.)"
+  (:require [clojure.set :as set])
+  (:use [loom.graph :only (digraph)]
+       [loom.alg :only (topsort)]))
 
 ;;;; Implementation
 
@@ -57,9 +60,36 @@
    blocks
    ^{:doc "True if Pipeline has been initialized (flushed with good data.)"}
    initialized?
+   ;; computed values
+   ^{:doc "Ordered collection of Blocks in the order they should be run."}
+   update-order
    ])
 
-;;;; Accessors
+;;;; Topology calculations
+
+(defn- ^Block find-input-block
+  "Find the source logic block for the named wire.
+   If there is a register on this wire, return nil."
+  [^Pipeline p, wire-kw]
+  (if (contains? (.registers p) wire-kw)
+    nil
+    (some #(contains? (.outputs ^Block %) wire-kw) (.blocks p))))
+
+(defn- block-depends
+  "Find all block-block dependencies for the given block.
+   Result is a collection of vectors [b some-block]."
+  [^Pipeline p, ^Block b]
+  (->> (.inputs b)
+       (map (partial find-input-block p) ,,,)
+       (filter (complement nil?) ,,,)
+       (map (partial vector b) ,,,)))
+
+(defn- block-graph
+  "Return the graph of Block records."
+  [^Pipeline p]
+  (apply digraph (map (partial block-depends p) (vals (.blocks p)))))
+
+;;;; API accessors
 
 (defn- require-init
   "Throw error if not initialized, running the thunk to get an action name
@@ -81,15 +111,12 @@
   (require-init #(str "peek wire " (name wire-kw)))
   (-> p (.wires) wire-kw))
 
-;;;; Running
+;;;; Unchecked modifiers
 
-(defn- ^Block find-input-block
-  "Find the source logic block for the named wire.
-   If there is a register on this wire, return nil."
-  [^Pipeline p, wire-kw]
-  (if (contains? (.registers p) wire-kw)
-    nil
-    (some #(contains? (.outputs ^Block %) wire-kw) (.blocks p))))
+(defn- ^Pipeline merge-registers
+  "Add registers and values (as map) without recomputing."
+  [^Pipeline p, regset]
+  (update-in p [:registers] merge regset))
 
 (defn- ^Pipeline compute-1
   "Compute the new outputs of one block. Assumes dependencies are clean."
@@ -98,35 +125,32 @@
         out-vals ((juxt (vals (.outputs b))) main-val)]
     (update-in p [:wires] (partial map assoc) (keys (.outputs b)) out-vals)))
 
-(defn- ^Pipeline compute-wires-worklist
-  "Use worklist to perform actual work for compute-wires.
-   `remaining` is the set of wire names left to compute."
-  [^Pipeline p, remaining]
-  (if-let [wire (first (seq remaining))]
-    (if-let [block (find-input-block p wire)]
-      (let [inputs (.inputs block)]
-        (if (empty? (set/intersection (set (keys inputs)) remaining))
-          (recur (compute-1 p block) (disj remaining wire))
-          ;; TODO case where dependencies not met
-          )))
-    p))
-
 (defn- ^Pipeline compute-wires
   "Recompute the wire values on a dirty pipeline."
   [^Pipeline p]
-  (compute-wires-worklist (set (keys (.wires p)))))
+  (reduce compute-1 p (.update-order p)))
+
+(defn- ^Pipeline sort-updaters
+  "Compute the .update-order field using topo sort."
+  [^Pipeline p]
+  (let [g (block-graph p)
+        sorted (topsort g)]
+    (when (nil? sorted)
+      (throw (Exception. "Cycle detected in logic blocks. Add registers.")))
+    (assoc-in p [:update-order] sorted)))
+
+;;;; Running
 
 (defn ^Pipeline reset
   "Set new values for 0 or more registers (as a map of name keys to values)
    and compute the new wire values."
   [^Pipeline p, regsets]
-  (compute-wires (update-in p [:registers] merge regsets)))
+  (compute-wires (merge-registers p regsets)))
 
 (defn ^Pipeline step
   "Step the simulation forward by one cycle."
   [^Pipeline p]
-  (let [newregs (select-keys (.wires p) (keys (.registers p)))]
-    (compute-wires (assoc-in p [:registers] newregs))))
+  (reset p (select-keys (.wires p) (keys (.registers p)))))
 
 ;;;; Construction
 
@@ -148,13 +172,16 @@
   "Initialize a pipeline by specifying all registers (using a map of
    register name keys to initial values) and updating the wire values.
    The resulting pipeline is ready to be used."
-  [^Pipeline p, init-pairs]
-  (assoc-in (reset p init-pairs) [:initialized?] true))
+  [^Pipeline uninit, init-pairs]
+  (let [with-reg (merge-registers uninit init-pairs)
+        with-updaters (sort-updaters with-reg)
+        consistent (compute-wires with-updaters)]
+    (assoc-in consistent [:initialized?] true)))
 
 (defn ^Pipeline create
   "Create a Pipeline, optionally with the specified logic blocks, each being
    the same collection that `add` accepts as arguments."
   [& blocks]
   (reduce #(apply add %1 %2)
-          (Pipeline. {} {} {} false)
+          (Pipeline. {} {} {} false nil)
           blocks))
