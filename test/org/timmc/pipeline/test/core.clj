@@ -110,3 +110,7 @@
       (is (= (first (keep-indexed (fn [i el] (if (peek-wire el :halt) i nil))
                                   steps))
              111)))))
+
+(deftest de-init
+  (let [cmod (add (collatz 27) :foo inc [] :bar)]
+    (is (thrown? IllegalStateException (step cmod)))))

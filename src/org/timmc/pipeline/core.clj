@@ -168,11 +168,13 @@
   "Set new values for 0 or more registers (as a map of name keys to values)
    and compute the new wire values."
   [^Pipeline p, regsets]
+  (require-init p #(str "set registers"))
   (compute-wires (merge-registers p regsets)))
 
 (defn ^Pipeline step
   "Step the simulation forward by one cycle."
   [^Pipeline p]
+  (require-init p #(str "step simulation"))
   (reset p (select-keys (.wires p) (keys (.registers p)))))
 
 ;;;; Construction
