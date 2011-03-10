@@ -126,6 +126,11 @@
       (throw (Exception. "Cycle detected in logic blocks. Add registers.")))
     sorted))
 
+(defn- ^Pipeline sort-blocks
+  "Fill in the .update-order field on a Pipeline with registers."
+  [^Pipeline p]
+  (assoc-in p [:update-order] (replace (.blocks p) (sorted-block-names p))))
+
 ;;;; Unchecked modifiers
 
 (defn- ^Pipeline merge-registers
@@ -136,9 +141,11 @@
 (defn- ^Pipeline compute-1
   "Compute the new outputs of one block. Assumes dependencies are clean."
   [^Pipeline p, ^Block b]
-  (let [main-val (apply (.process b) (replace (.wires p) (.inputs b)))
-        out-vals ((juxt (vals (.outputs b))) main-val)]
-    (update-in p [:wires] (partial map assoc) (keys (.outputs b)) out-vals)))
+  (let [main-val (apply (.process b) (replace (merge (.wires p) (.registers p))
+                                              (.inputs b)))
+        out-vals ((apply juxt (vals (.outputs b))) main-val)
+        out-pairs (map vector (keys (.outputs b)) out-vals)]
+    (update-in p [:wires] into out-pairs)))
 
 (defn- ^Pipeline compute-wires
   "Recompute the wire values on a dirty pipeline."
@@ -186,9 +193,7 @@
    The resulting pipeline is ready to be used."
   [^Pipeline uninit, init-pairs]
   (let [with-reg (merge-registers uninit init-pairs)
-        with-updaters (assoc-in with-reg [:update-order]
-                                (replace (.blocks with-reg)
-                                         (sorted-block-names with-reg)))
+        with-updaters (sort-blocks with-reg)
         consistent (compute-wires with-updaters)]
     (assoc-in consistent [:initialized?] true)))
 
