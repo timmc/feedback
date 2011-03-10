@@ -84,17 +84,22 @@
     (is (= (vec (block-depends with-reg :A)) [[:A :F] [:A :E]]))
     (is (= (vec (sorted-block-names with-reg)) [:D :E :C :F :A :B]))))
 
-#_
-(deftest initialization
-  (let [full-init (initialize full {:a 5})]
-    (is (= (find-input-block-name full-init :a) nil))
-    (is (= (find-input-block-name full-init :b) :B))))
+(defn collatz
+  [n]
+  (initialize
+   (create
+    [:next #(if (zero? %1) %2 %3) [:parity :half :triplus] :n]
+    [:done #(= 1 %) [:n] :halt] ; dead-end node is important test-case
+    [:decoder #(mod % 2) [:n] :parity]
+    [:down #(quot % 2) [:n] :half]
+    [:up #(inc (* 3 %)) [:n] :triplus])
+   {:n n}))
 
-#_
-(create
- [:next #(if (zero? %1) %2 %3) [:parity :half :triplus] :n]
- [:done #(= 1 %) [:n] {}]
- [:decoder #(mod % 2) [:n] :parity]
- [:down #(quot % 2) [:n] :half]
- [:up #(inc (* 3 %)) [:n] :triplus])
-
+(deftest collatz-count
+  (let [c27 (collatz 27)]
+    (is (= (block-depends c27 :done) []))
+    (is (= (vec (sorted-block-names c27))
+           [:decoder :done :down :up :next]))
+    (let [steps (iterate step c27)]
+      (is (= (peek-register (nth steps 0) :n) 27))
+      (is (= (peek-wire (nth steps 0) :halt) false)))))

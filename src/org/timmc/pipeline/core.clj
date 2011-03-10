@@ -103,7 +103,11 @@
 
 (defn- block-depends
   "Find all block-block dependencies for the given block name.
-   Result is a collection of vectors [b some-block]."
+   Result is a collection of vectors [b some-block].
+   
+   Independent blocks that only read from registers and are never read from
+   by other blocks will return an empty collection and must be handled
+   carefully if they are to be placed in the graph."
   [^Pipeline p, name]
   (->> ((.blocks p) name)
        (.inputs ,,,)
@@ -114,7 +118,13 @@
 (defn- block-graph
   "Return the graph of Block records."
   [^Pipeline p]
-  (apply digraph (mapcat (partial block-depends p) (keys (.blocks p)))))
+  (let [parts (for [bk (keys (.blocks p))]
+                (let [deps (block-depends p bk)]
+                  ;; non-dependent nodes handled specially for addition to graph
+                  (if (seq deps)
+                    deps
+                    [bk])))]
+    (apply digraph (apply concat parts))))
 
 (defn- sorted-block-names
   "Return the names of blocks in an order appropriate for updating.
@@ -204,3 +214,14 @@
   (reduce #(apply add-unchecked %1 %2)
           (Pipeline. {} {} {} false nil)
           blocks))
+
+;;;; Useful addons
+
+(defmethod print-method Block
+  [bl writer]
+  (print-method {:in (.inputs bl) :out (keys (.outputs bl))} writer))
+
+(defmethod print-method Pipeline
+  [pl writer]
+  (print-method (select-keys pl [:wires :registers :initialized? :update-order])
+                writer))
