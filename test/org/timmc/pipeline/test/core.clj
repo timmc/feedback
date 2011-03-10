@@ -102,4 +102,11 @@
            [:decoder :done :down :up :next]))
     (let [steps (iterate step c27)]
       (is (= (peek-register (nth steps 0) :n) 27))
-      (is (= (peek-wire (nth steps 0) :halt) false)))))
+      (is (= (peek-wire (nth steps 0) :halt) false))
+      (is (= (peek-register (nth steps 1) :n) 82))
+      (is (= (peek-wire (nth steps 1) :halt) false))
+      (is (= (peek-register (nth steps 2) :n) 41))
+      (is (= (peek-wire (nth steps 2) :halt) false))
+      (is (= (first (keep-indexed (fn [i el] (if (peek-wire el :halt) i nil))
+                                  steps))
+             111)))))
