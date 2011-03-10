@@ -5,7 +5,7 @@ build:
 	lein compile | grep -v 'at clojure.'
 
 test:
-	lein test | grep -v 'at clojure.'
+	lein test | grep -v 'at clojure.' | grep -v '^    clojure.'
 
 run:
 	lein run

@@ -16,7 +16,7 @@
    Registers are named after wires they take their values from, and only
    advance on each clock cycle. To initialize the pipeline, all registers must
    be given initial values. After that, the step function may be used.
-
+   
    Each clock cycle is atomic. The Pipeline object returned from create or step
    will have values on output wires that are consistent with the input to their
    logic blocks, with register values being used in place of wire values for
@@ -30,7 +30,10 @@
    match inputs or outputs, you may receive unexpected nil values or even
    exceptions. (Future versions of this utility may check for this condition.)
    If you have an inconsistent number of registers along any two datapaths,
-   you will not be warned. (This is sometimes an intentional design decision.)"
+   you will not be warned. (This is sometimes an intentional design decision.)
+
+   The API consists of create, add, initialize, step, peek-register, peek-wire,
+   and step."
   (:require [clojure.set :as set])
   (:use [loom.graph :only (digraph)]
        [loom.alg :only (topsort)]))
@@ -67,22 +70,23 @@
 
 ;;;; Topology calculations
 
-(defn- ^Block find-input-block
-  "Find the source logic block for the named wire.
+(defn- find-input-block-name
+  "Find the name of the source logic block for the named wire.
    If there is a register on this wire, return nil."
   [^Pipeline p, wire-kw]
   (if (contains? (.registers p) wire-kw)
     nil
-    (some #(contains? (.outputs ^Block %) wire-kw) (.blocks p))))
+    (key (some #(contains? (.outputs ^Block (val %)) wire-kw) (.blocks p)))))
 
 (defn- block-depends
-  "Find all block-block dependencies for the given block.
+  "Find all block-block dependencies for the given block name.
    Result is a collection of vectors [b some-block]."
-  [^Pipeline p, ^Block b]
-  (->> (.inputs b)
-       (map (partial find-input-block p) ,,,)
+  [^Pipeline p, name]
+  (->> ((.blocks p) name)
+       (.inputs ,,,)
+       (map (partial find-input-block-name p) ,,,)
        (filter (complement nil?) ,,,)
-       (map (partial vector b) ,,,)))
+       (map (partial vector name) ,,,)))
 
 (defn- block-graph
   "Return the graph of Block records."
@@ -137,7 +141,7 @@
         sorted (topsort g)]
     (when (nil? sorted)
       (throw (Exception. "Cycle detected in logic blocks. Add registers.")))
-    (assoc-in p [:update-order] sorted)))
+    (assoc-in p [:update-order] (replace (.blocks p) sorted))))
 
 ;;;; Running
 
@@ -154,6 +158,14 @@
 
 ;;;; Construction
 
+(defn- ^Pipeline add-unchecked
+  "Same as add, but doesn't read or write the .initialized? field."
+  [^Pipeline p, name, f, inputs, outputs]
+  (let [outputs (if (map? outputs) outputs {outputs identity})
+        more-wires (map #(vector % nil) (concat inputs (keys outputs)))
+        with-wires (update-in p [:wires] merge (into {} more-wires))]
+    (assoc-in with-wires [:blocks name] (Block. inputs f outputs))))
+
 (defn ^Pipeline add
   "Define a logic block, its inputs, functions, and outputs.
    - name: a keyword naming this logic block uniquely
@@ -164,9 +176,7 @@
      Alternatively, a single bare keyword can be provided, and will be treated
      as {kw identity}"
   [^Pipeline p, name, f, inputs, outputs]
-  (let [outputs (if (seq? outputs) outputs {outputs identity})]
-    ;; FIXME: should really add wire names in at this point
-    (assoc-in p [:blocks name] (Block. inputs f outputs))))
+  (assoc-in (add-unchecked p name f inputs outputs) [:initialized?] false))
 
 (defn ^Pipeline initialize
   "Initialize a pipeline by specifying all registers (using a map of
@@ -182,6 +192,6 @@
   "Create a Pipeline, optionally with the specified logic blocks, each being
    the same collection that `add` accepts as arguments."
   [& blocks]
-  (reduce #(apply add %1 %2)
+  (reduce #(apply add-unchecked %1 %2)
           (Pipeline. {} {} {} false nil)
           blocks))

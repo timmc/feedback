@@ -3,6 +3,7 @@
   (:use [clojure.test])
   (:use [clojure.contrib.math :only (gcd lcm)]))
 
+;;;; Functions to ues as logic blocks
 
 (defn A
   [f1 e]
@@ -32,26 +33,39 @@
   [f]
   (zero? (mod f 2)))
 
-(let [p (pl/create
-         [:a :b :c :e]
-         [:e]
-         :A A [:f1 :e] :a
-         :B B [:f2] :b
-         :C C [:a :b] :c
-         :D D [:a :b] :d
-         :E E [:d] :e
-         :F F [:c] {:f1 F1 :f2 identity})
-      p (pl/initialize p {:a 0 :b 1})]
-  (println p))
+(def full
+  (pl/create
+   [:A A [:f1 :e] :a]
+   [:B B [:f2] :b]
+   [:C C [:a :b] :c]
+   [:D D [:a :b] :d]
+   [:E E [:d] :e]
+   [:F F [:c] {:f1 F1 :f2 identity}]))
 
+;;;; Tests
 
+(defmacro succeed
+  "Assert that no exception is thrown. (A little silly.)"
+  [& exprs]
+  `(is (do ~@exprs true)))
+
+(deftest creation
+  (is (not (.initialized? (pl/create))))
+  (let [single (pl/add (pl/create) :A A [:f1 :e] :a)]
+    (is (= (count (.blocks single)) 1))
+    (is (not (.initialized? single)))))
+
+(deftest additions
+  (is (= (-> (pl/create [:A A [:b] :pass]) (.blocks) :A :outputs)
+         {:pass identity}))
+  (is (= (-> (pl/create [:A A [:b] {}]) (.blocks) :A :outputs)
+         {})))
 
 #_
 (pl/create
- [[]]
- [[:next #(if (zero? %1) %2 %3) [:parity :half :triplus] [:n] :initial]
-  [:done #(= 1 %) [:n] [] :halt]
-  [:decoder #(mod % 2) [:n] [:parity]]
-  [:down #(quot % 2) [:n] [:half]]
-  [:up #(inc (* 3 %)) [:n] [:triplus]]])
+ [:next #(if (zero? %1) %2 %3) [:parity :half :triplus] :n]
+ [:done #(= 1 %) [:n] {}]
+ [:decoder #(mod % 2) [:n] :parity]
+ [:down #(quot % 2) [:n] :half]
+ [:up #(inc (* 3 %)) [:n] :triplus])
 
