@@ -69,15 +69,23 @@
   (is (= (-> (create [:A A [:b] {}]) (.blocks) :A :outputs)
          {})))
 
-(deftest initialization
+(deftest accessors
   (let [with-reg (merge-registers full {:foo 4 :bar 5})
         more-reg (merge-registers with-reg {:foo 7})]
     (is (= (.registers more-reg) {:foo 7 :bar 5}))
     (is (= (find-input-block-name more-reg :foo) nil))
     (is (= (find-input-block-name more-reg :b) :B))
     (is (thrown? IllegalStateException (peek-register more-reg :foo)))
-    (is (= (peek-register (assoc-in more-reg [:initialized?] true) :foo) 7)))
-  #_
+    (is (= (peek-register (assoc-in more-reg [:initialized?] true) :foo) 7))))
+
+(deftest topology
+  (let [with-reg (merge-registers full {:a 27 :b 13})]
+    (is (= (vec (block-depends with-reg :C)) []))
+    (is (= (vec (block-depends with-reg :A)) [[:A :F] [:A :E]]))
+    (is (= (vec (sorted-block-names with-reg)) [:D :E :C :F :A :B]))))
+
+#_
+(deftest initialization
   (let [full-init (initialize full {:a 5})]
     (is (= (find-input-block-name full-init :a) nil))
     (is (= (find-input-block-name full-init :b) :B))))

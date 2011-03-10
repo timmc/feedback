@@ -114,7 +114,17 @@
 (defn- block-graph
   "Return the graph of Block records."
   [^Pipeline p]
-  (apply digraph (map (partial block-depends p) (vals (.blocks p)))))
+  (apply digraph (mapcat (partial block-depends p) (keys (.blocks p)))))
+
+(defn- sorted-block-names
+  "Return the names of blocks in an order appropriate for updating.
+   Throw error if cycles detected."
+  [^Pipeline p]
+  (let [g (block-graph p)
+        sorted (reverse (topsort g))]
+    (when (nil? sorted)
+      (throw (Exception. "Cycle detected in logic blocks. Add registers.")))
+    sorted))
 
 ;;;; Unchecked modifiers
 
@@ -134,15 +144,6 @@
   "Recompute the wire values on a dirty pipeline."
   [^Pipeline p]
   (reduce compute-1 p (.update-order p)))
-
-(defn- ^Pipeline sort-updaters
-  "Compute the .update-order field using topo sort."
-  [^Pipeline p]
-  (let [g (block-graph p)
-        sorted (topsort g)]
-    (when (nil? sorted)
-      (throw (Exception. "Cycle detected in logic blocks. Add registers.")))
-    (assoc-in p [:update-order] (replace (.blocks p) sorted))))
 
 ;;;; Running
 
@@ -185,7 +186,9 @@
    The resulting pipeline is ready to be used."
   [^Pipeline uninit, init-pairs]
   (let [with-reg (merge-registers uninit init-pairs)
-        with-updaters (sort-updaters with-reg)
+        with-updaters (assoc-in with-reg [:update-order]
+                                (replace (.blocks with-reg)
+                                         (sorted-block-names with-reg)))
         consistent (compute-wires with-updaters)]
     (assoc-in consistent [:initialized?] true)))
 
