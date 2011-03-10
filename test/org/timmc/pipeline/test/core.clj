@@ -75,8 +75,8 @@
     (is (= (.registers more-reg) {:foo 7 :bar 5}))
     (is (= (find-input-block-name more-reg :foo) nil))
     (is (= (find-input-block-name more-reg :b) :B))
-    (is (thrown? IllegalStateException (peek-register more-reg :foo)))
-    (is (= (peek-register (assoc-in more-reg [:initialized?] true) :foo) 7))))
+    (is (thrown? IllegalStateException (read-register more-reg :foo)))
+    (is (= (read-register (assoc-in more-reg [:initialized?] true) :foo) 7))))
 
 (deftest topology
   (let [with-reg (merge-registers full {:a 27 :b 13})]
@@ -86,7 +86,7 @@
 
 (defn collatz
   [n]
-  (initialize
+  (init
    (create
     [:next #(if (zero? %1) %2 %3) [:parity :half :triplus] :n]
     [:done #(= 1 %) [:n] :halt] ; dead-end node is important test-case
@@ -101,13 +101,13 @@
     (is (= (vec (sorted-block-names c27))
            [:decoder :done :down :up :next]))
     (let [steps (iterate step c27)]
-      (is (= (peek-register (nth steps 0) :n) 27))
-      (is (= (peek-wire (nth steps 0) :halt) false))
-      (is (= (peek-register (nth steps 1) :n) 82))
-      (is (= (peek-wire (nth steps 1) :halt) false))
-      (is (= (peek-register (nth steps 2) :n) 41))
-      (is (= (peek-wire (nth steps 2) :halt) false))
-      (is (= (first (keep-indexed (fn [i el] (if (peek-wire el :halt) i nil))
+      (is (= (read-register (nth steps 0) :n) 27))
+      (is (= (read-wire (nth steps 0) :halt) false))
+      (is (= (read-register (nth steps 1) :n) 82))
+      (is (= (read-wire (nth steps 1) :halt) false))
+      (is (= (read-register (nth steps 2) :n) 41))
+      (is (= (read-wire (nth steps 2) :halt) false))
+      (is (= (first (keep-indexed (fn [i el] (if (read-wire el :halt) i nil))
                                   steps))
              111)))))
 

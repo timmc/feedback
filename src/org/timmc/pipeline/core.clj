@@ -32,7 +32,7 @@
    If you have an inconsistent number of registers along any two datapaths,
    you will not be warned. (This is sometimes an intentional design decision.)
 
-   The API consists of create, add, initialize, step, peek-register, peek-wire,
+   The API consists of create, add, init, step, read-register, read-wire,
    and step."
   (:require [clojure.set :as set])
   (:use [loom.graph :only (digraph)]
@@ -78,16 +78,16 @@
     (throw (IllegalStateException.
             (str "Cannot " (action-name-thunk) " before initialization.")))))
 
-(defn peek-register
+(defn read-register
   "Return value in register, if initialized."
   [^Pipeline p, reg-kw]
-  (require-init p #(str "peek register " (name reg-kw)))
+  (require-init p #(str "read register " (name reg-kw)))
   (-> p (.registers) reg-kw))
 
-(defn peek-wire
+(defn read-wire
   "Return value on wire, if initialized."
   [^Pipeline p, wire-kw]
-  (require-init p #(str "peek wire " (name wire-kw)))
+  (require-init p #(str "read wire " (name wire-kw)))
   (-> p (.wires) wire-kw))
 
 ;;;; Topology calculations
@@ -199,7 +199,7 @@
   [^Pipeline p, name, f, inputs, outputs]
   (assoc-in (add-unchecked p name f inputs outputs) [:initialized?] false))
 
-(defn ^Pipeline initialize
+(defn ^Pipeline init
   "Initialize a pipeline by specifying all registers (using a map of
    register name keys to initial values) and updating the wire values.
    The resulting pipeline is ready to be used."
