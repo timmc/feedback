@@ -68,6 +68,28 @@
    update-order
    ])
 
+;;;; API accessors
+
+(defn- require-init
+  "Throw error if not initialized, running the thunk to get an action name
+   for the message."
+  [^Pipeline p, action-name-thunk]
+  (when-not (.initialized? p)
+    (throw (IllegalStateException.
+            (str "Cannot " (action-name-thunk) " before initialization.")))))
+
+(defn peek-register
+  "Return value in register, if initialized."
+  [^Pipeline p, reg-kw]
+  (require-init #(str "peek register " (name reg-kw)))
+  (-> p (.registers) reg-kw))
+
+(defn peek-wire
+  "Return value on wire, if initialized."
+  [^Pipeline p, wire-kw]
+  (require-init #(str "peek wire " (name wire-kw)))
+  (-> p (.wires) wire-kw))
+
 ;;;; Topology calculations
 
 (defn- find-input-block-name
@@ -92,28 +114,6 @@
   "Return the graph of Block records."
   [^Pipeline p]
   (apply digraph (map (partial block-depends p) (vals (.blocks p)))))
-
-;;;; API accessors
-
-(defn- require-init
-  "Throw error if not initialized, running the thunk to get an action name
-   for the message."
-  [^Pipeline p, action-name-thunk]
-  (when-not (.initialized? p)
-    (throw (IllegalStateException.
-            (str "Cannot " (action-name-thunk) " before initialization.")))))
-
-(defn peek-register
-  "Return value in register, if initialized."
-  [^Pipeline p, reg-kw]
-  (require-init #(str "peek register " (name reg-kw)))
-  (-> p (.registers) reg-kw))
-
-(defn peek-wire
-  "Return value on wire, if initialized."
-  [^Pipeline p, wire-kw]
-  (require-init #(str "peek wire " (name wire-kw)))
-  (-> p (.wires) wire-kw))
 
 ;;;; Unchecked modifiers
 
