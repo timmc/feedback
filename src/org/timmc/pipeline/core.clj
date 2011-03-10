@@ -98,7 +98,8 @@
   [^Pipeline p, wire-kw]
   (if (contains? (.registers p) wire-kw)
     nil
-    (key (some #(contains? (.outputs ^Block (val %)) wire-kw) (.blocks p)))))
+    (key (first (filter #(contains? (.outputs ^Block (val %)) wire-kw)
+                        (.blocks p))))))
 
 (defn- block-depends
   "Find all block-block dependencies for the given block name.

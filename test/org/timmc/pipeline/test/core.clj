@@ -1,7 +1,15 @@
 (ns org.timmc.pipeline.test.core
-  (:require [org.timmc.pipeline.core :as pl] :reload)
+  (:use [org.timmc.pipeline.core] :reload)
   (:use [clojure.test])
   (:use [clojure.contrib.math :only (gcd lcm)]))
+
+;;;; Evil stuff to allow testing of private defns
+
+;; Thanks to Stuart Sierra
+;; <https://groups.google.com/group/clojure/msg/66f15396411e49e9>
+(doseq [[symbol var] (ns-interns (the-ns 'org.timmc.pipeline.core))]
+  (when (:private (meta var))
+    (intern *ns* symbol var))) 
 
 ;;;; Functions to ues as logic blocks
 
@@ -34,7 +42,7 @@
   (zero? (mod f 2)))
 
 (def full
-  (pl/create
+  (create
    [:A A [:f1 :e] :a]
    [:B B [:f2] :b]
    [:C C [:a :b] :c]
@@ -50,19 +58,32 @@
   `(is (do ~@exprs true)))
 
 (deftest creation
-  (is (not (.initialized? (pl/create))))
-  (let [single (pl/add (pl/create) :A A [:f1 :e] :a)]
+  (is (not (.initialized? (create))))
+  (let [single (add (create) :A A [:f1 :e] :a)]
     (is (= (count (.blocks single)) 1))
     (is (not (.initialized? single)))))
 
 (deftest additions
-  (is (= (-> (pl/create [:A A [:b] :pass]) (.blocks) :A :outputs)
+  (is (= (-> (create [:A A [:b] :pass]) (.blocks) :A :outputs)
          {:pass identity}))
-  (is (= (-> (pl/create [:A A [:b] {}]) (.blocks) :A :outputs)
+  (is (= (-> (create [:A A [:b] {}]) (.blocks) :A :outputs)
          {})))
 
+(deftest initialization
+  (let [with-reg (merge-registers full {:foo 4 :bar 5})
+        more-reg (merge-registers with-reg {:foo 7})]
+    (is (= (.registers more-reg) {:foo 7 :bar 5}))
+    (is (= (find-input-block-name more-reg :foo) nil))
+    (is (= (find-input-block-name more-reg :b) :B)))
+  #_
+  (let [full-init (initialize full {:a 5})]
+    (is (= (peek-register full-init :a) 5))
+    (is (= (peek-wire full-init :b) 5))
+    (is (= (find-input-block-name full-init :a) nil))
+    (is (= (find-input-block-name full-init :b) :B))))
+
 #_
-(pl/create
+(create
  [:next #(if (zero? %1) %2 %3) [:parity :half :triplus] :n]
  [:done #(= 1 %) [:n] {}]
  [:decoder #(mod % 2) [:n] :parity]
