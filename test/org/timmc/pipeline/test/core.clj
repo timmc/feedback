@@ -74,11 +74,11 @@
         more-reg (merge-registers with-reg {:foo 7})]
     (is (= (.registers more-reg) {:foo 7 :bar 5}))
     (is (= (find-input-block-name more-reg :foo) nil))
-    (is (= (find-input-block-name more-reg :b) :B)))
+    (is (= (find-input-block-name more-reg :b) :B))
+    (is (thrown? IllegalStateException (peek-register more-reg :foo)))
+    (is (= (peek-register (assoc-in more-reg [:initialized?] true) :foo) 7)))
   #_
   (let [full-init (initialize full {:a 5})]
-    (is (= (peek-register full-init :a) 5))
-    (is (= (peek-wire full-init :b) 5))
     (is (= (find-input-block-name full-init :a) nil))
     (is (= (find-input-block-name full-init :b) :B))))
 

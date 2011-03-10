@@ -81,13 +81,13 @@
 (defn peek-register
   "Return value in register, if initialized."
   [^Pipeline p, reg-kw]
-  (require-init #(str "peek register " (name reg-kw)))
+  (require-init p #(str "peek register " (name reg-kw)))
   (-> p (.registers) reg-kw))
 
 (defn peek-wire
   "Return value on wire, if initialized."
   [^Pipeline p, wire-kw]
-  (require-init #(str "peek wire " (name wire-kw)))
+  (require-init p #(str "peek wire " (name wire-kw)))
   (-> p (.wires) wire-kw))
 
 ;;;; Topology calculations
