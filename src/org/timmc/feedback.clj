@@ -1,5 +1,5 @@
 (ns org.timmc.feedback
-  "Logic pipeline manager.
+  "Behavioral simulator utility for sequential logic circuits.
    
    Specify a collection of logic blocks and registers, then advance the
    state of the world one clock cycle at a time.
