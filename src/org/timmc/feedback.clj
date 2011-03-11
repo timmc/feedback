@@ -1,9 +1,9 @@
-(ns org.timmc.pipeline.core
+(ns org.timmc.feedback
   "Logic pipeline manager.
-
+   
    Specify a collection of logic blocks and registers, then advance the
    state of the world one clock cycle at a time.
-
+   
    Each logic block is declared to take inputs from named wires and produce
    outputs on other named wires. (Values are not restricted to booleans or
    numbers; they are arbitrary.) The block is specified with a function that
@@ -23,7 +23,7 @@
    inputs that name them. Note that a wire and a register with the same name
    will most likely not have the same value. However, the register's next value
    will be the wire's current value.
-
+   
    There are currently no checks for the sanity of the pipeline you construct,
    besides ensuring that there are no loops of logic blocks that are not
    broken up by registers. If you specify named wires or registers that do not
@@ -31,12 +31,11 @@
    exceptions. (Future versions of this utility may check for this condition.)
    If you have an inconsistent number of registers along any two datapaths,
    you will not be warned. (This is sometimes an intentional design decision.)
-
-   The API consists of create, add, init, step, read-register, read-wire,
-   and step."
+   
+   The API consists of create, add, init, step, read-register, and read-wire."
   (:require [clojure.set :as set])
   (:use [loom.graph :only (digraph)]
-       [loom.alg :only (topsort)]))
+        [loom.alg :only (topsort)]))
 
 ;;;; Implementation
 
