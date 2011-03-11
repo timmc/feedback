@@ -1,5 +1,5 @@
-(ns org.timmc.pipeline.test.core
-  (:use [org.timmc.pipeline.core] :reload)
+(ns org.timmc.test.feedback
+  (:use [org.timmc.feedback] :reload)
   (:use [clojure.test])
   (:use [clojure.contrib.math :only (gcd lcm)]))
 
@@ -7,7 +7,7 @@
 
 ;; Thanks to Stuart Sierra
 ;; <https://groups.google.com/group/clojure/msg/66f15396411e49e9>
-(doseq [[symbol var] (ns-interns (the-ns 'org.timmc.pipeline.core))]
+(doseq [[symbol var] (ns-interns (the-ns 'org.timmc.feedback))]
   (when (:private (meta var))
     (intern *ns* symbol var))) 
 
