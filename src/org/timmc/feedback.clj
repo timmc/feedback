@@ -108,8 +108,7 @@
    by other blocks will return an empty collection and must be handled
    carefully if they are to be placed in the graph."
   [^Pipeline p, name]
-  (->> ((.blocks p) name)
-       (.inputs ,,,)
+  (->> (.inputs ^Block ((.blocks p) name))
        (map (partial find-input-block-name p) ,,,)
        (filter (complement nil?) ,,,)
        (map (partial vector name) ,,,)))
@@ -219,10 +218,10 @@
 ;;;; Useful addons
 
 (defmethod print-method Block
-  [bl writer]
+  [^Block bl, writer]
   (print-method {:in (.inputs bl) :out (keys (.outputs bl))} writer))
 
 (defmethod print-method Pipeline
-  [pl writer]
+  [^Pipeline pl, writer]
   (print-method (select-keys pl [:wires :registers :initialized? :update-order])
                 writer))
