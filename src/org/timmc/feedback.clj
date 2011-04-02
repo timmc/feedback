@@ -42,6 +42,8 @@
 (defrecord ^{:doc "A single logic block."}
     Block
   [
+   ^{:doc "Name of logic block."}
+   name
    ^{:doc "Names of inputs in order, as a vector."}
    inputs
    ^{:doc "Core processing function, which takes the inputs in order."}
@@ -149,8 +151,8 @@
 (defn- ^Pipeline compute-1
   "Compute the new outputs of one block. Assumes dependencies are clean."
   [^Pipeline p, ^Block b]
-  (let [main-val (apply (.process b) (replace (merge (.wires p) (.registers p))
-                                              (.inputs b)))
+  (let [available-inputs (merge (.wires p) (.registers p))
+        main-val (apply (.process b) (replace available-inputs (.inputs b)))
         out-vals ((apply juxt (vals (.outputs b))) main-val)
         out-pairs (map vector (keys (.outputs b)) out-vals)]
     (update-in p [:wires] into out-pairs)))
@@ -177,25 +179,49 @@
 
 ;;;; Construction
 
+(defn- wrap-processor
+  "Wrap a processor function in a function that can wrap exceptions with
+   reporting on what block and output were responsible.
+   The wrapped function is available as :wraps in the returned fn's metadata."
+  [block-key output-key f]
+  (with-meta
+    (fn wrapped-output-f
+      [& vals]
+      (try (apply f vals)
+           (catch Exception e
+             (throw (RuntimeException.
+                     (format "Failure in computing %s output for block %s"
+                             output-key block-key)
+                     e)))))
+    {:wraps f}))
+
+(defn- wrap-output
+  "Wrap the output function in an output key-value pair."
+  [block-key [output-key f]]
+  [output-key (wrap-processor block-key output-key f)])
+
 (defn- ^Pipeline add-unchecked
   "Same as add, but doesn't read or write the .initialized? field."
-  [^Pipeline p, name, f, inputs, outputs]
+  [^Pipeline p, key, f, inputs, outputs]
   (let [outputs (if (map? outputs) outputs {outputs identity})
+        outputs (into {} (map #(wrap-output key %) outputs))
+        f (wrap-processor key "core" f)
         more-wires (map #(vector % nil) (concat inputs (keys outputs)))
-        with-wires (update-in p [:wires] merge (into {} more-wires))]
-    (assoc-in with-wires [:blocks name] (Block. inputs f outputs))))
+        with-wires (update-in p [:wires] merge (into {} more-wires))
+        name (name key)]
+    (assoc-in with-wires [:blocks key] (Block. name inputs f outputs))))
 
 (defn ^Pipeline add
   "Define a logic block, its inputs, functions, and outputs.
-   - name: a keyword naming this logic block uniquely
+   - key: a keyword naming this logic block uniquely
    - f: function that receives the input values as arguments in order
    - inputs: a collection of keywords naming wires to be use as inputs to f
    - outputs: a map of keywords (naming own outputs) to functions that will
      take the return value of f and produce values for output.
      Alternatively, a single bare keyword can be provided, and will be treated
      as {kw identity}"
-  [^Pipeline p, name, f, inputs, outputs]
-  (assoc-in (add-unchecked p name f inputs outputs) [:initialized?] false))
+  [^Pipeline p, key, f, inputs, outputs]
+  (assoc-in (add-unchecked p key f inputs outputs) [:initialized?] false))
 
 (defn ^Pipeline init
   "Initialize a pipeline by specifying all registers (using a map of
@@ -219,7 +245,8 @@
 
 (defmethod print-method Block
   [^Block bl, writer]
-  (print-method {:in (.inputs bl) :out (keys (.outputs bl))} writer))
+  (print-method {:name (.name bl) :in (.inputs bl) :out (keys (.outputs bl))}
+                writer))
 
 (defmethod print-method Pipeline
   [^Pipeline pl, writer]

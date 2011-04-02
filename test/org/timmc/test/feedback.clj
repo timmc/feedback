@@ -64,8 +64,10 @@
     (is (not (.initialized? single)))))
 
 (deftest additions
-  (is (= (-> (create [:A A [:b] :pass]) (.blocks) :A :outputs)
-         {:pass identity}))
+  (let [outs (-> (create [:A A [:b] :pass]) (.blocks) :A :outputs)]
+    (is (= (count outs) 1))
+    (is (= (key (first outs)) :pass))
+    (is (= (-> (val (first outs)) meta :wraps) identity)))
   (is (= (-> (create [:A A [:b] {}]) (.blocks) :A :outputs)
          {})))
 
@@ -114,3 +116,21 @@
 (deftest de-init
   (let [cmod (add (collatz 27) :foo inc [] :bar)]
     (is (thrown? IllegalStateException (step cmod)))))
+
+(deftest error-annotation
+  (let [throw-nullary #(throw (Exception. "badmain"))
+        bad-main (create [:x throw-nullary [] :y])
+        thrown (try (init bad-main {})
+                    false
+                    (catch Exception e
+                      e))]
+    (is (thrown-with-msg? Exception #"core output for block :x" (throw thrown)))
+    (is (thrown-with-msg? Exception #"badmain" (throw (.getCause thrown)))))
+  (let [throw-unary (fn [_] (throw (Exception. "badout")))
+        bad-out (create [:x inc [:y] {:z throw-unary}])      
+        thrown (try (init bad-out {:y 4})
+                    false
+                    (catch Exception e
+                      e))]
+    (is (thrown-with-msg? Exception #":z output for block :x" (throw thrown)))
+    (is (thrown-with-msg? Exception #"badout" (throw (.getCause thrown))))))
