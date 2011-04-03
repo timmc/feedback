@@ -1,4 +1,4 @@
-(defproject org.timmc/feedback "0.3.0"
+(defproject org.timmc/feedback "0.4.0-SNAPSHOT"
   :description "Behavioral simulator utility for sequential logic circuits."
   :author "Tim McCormack"
   :license [{:name "Eclipse Public License - v1.0"

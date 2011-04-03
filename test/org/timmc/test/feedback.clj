@@ -97,6 +97,16 @@
     [:up #(inc (* 3 %)) [:n] :triplus])
    {:n n}))
 
+(deftest bulk-retrieval
+  (let [c27 (collatz 27)]
+    (is (= (all-registers c27)
+           {:n 27}))
+    (is (= (all-wires c27)
+           {:halt false, :parity 1, :half 13, :triplus 82, :n 82})))
+  (let [deinit (add (collatz 27) :foo identity [:n] :bar)] ;; de-initialized
+    (is (thrown? IllegalStateException (all-registers deinit)))
+    (is (thrown? IllegalStateException (all-wires deinit)))))
+
 (deftest collatz-count
   (let [c27 (collatz 27)]
     (is (= (block-depends c27 :done) []))

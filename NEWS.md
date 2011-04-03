@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.4.0 (???)
+
+Further debugging-support enhancement.
+
+### Features
+
+* Add API methods all-registers and all-wires.
+
 ## v0.3.0 (2011-04-02)
 
 Improve debugging output.

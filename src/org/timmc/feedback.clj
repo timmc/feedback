@@ -32,7 +32,8 @@
    If you have an inconsistent number of registers along any two datapaths,
    you will not be warned. (This is sometimes an intentional design decision.)
    
-   The API consists of create, add, init, step, read-register, and read-wire."
+   The API consists of create, add, init, step, reset, read-register, read-wire,
+   all-registers, and all-wires."
   (:require [clojure.set :as set])
   (:use [loom.graph :only (digraph)]
         [loom.alg :only (topsort)]))
@@ -90,6 +91,18 @@
   [^Pipeline p, wire-kw]
   (require-init p #(str "read wire " (name wire-kw)))
   (-> p (.wires) wire-kw))
+
+(defn all-registers
+  "Return map of all register keys to values, if initialized."
+  [^Pipeline p]
+  (require-init p #(str "read registers"))
+  (-> p (.registers)))
+
+(defn all-wires
+  "Return map of all wire keys to values, if initialized."
+  [^Pipeline p]
+  (require-init p #(str "read wires"))
+  (-> p (.wires)))
 
 ;;;; Topology calculations
 
