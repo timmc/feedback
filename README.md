@@ -2,6 +2,12 @@
 
 Behavioral simulator utility for sequential logic circuits.
 
+**Warning: This library needs to be rewritten. The current version's
+wire-and-block model contains a misconception that will make certain circuits
+impossible to code.** I've forgotten the precise details, but it has something
+to do with the overly clever feature of registers taking their value from
+wires of the same name.
+
 Simulate a sequential circuit at a high level by defining combinational logic
 blocks, their interconnections, and the placement of registers. After
 initializing all the registers, step the simulation forward one logical clock
