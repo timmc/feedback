@@ -1,7 +1,6 @@
 (ns org.timmc.test.feedback
   (:use [org.timmc.feedback] :reload)
-  (:use [clojure.test])
-  (:use [clojure.contrib.math :only (gcd lcm)]))
+  (:use [clojure.test]))
 
 ;;;; Evil stuff to allow testing of private defns
 
@@ -11,7 +10,33 @@
   (when (:private (meta var))
     (intern *ns* symbol var))) 
 
-;;;; Functions to ues as logic blocks
+;;;; A few math fns
+
+(defn gcd ^long [^long a ^long b]
+  (loop [a (Math/abs a)
+         b (Math/abs b)]
+    (if (zero? b)
+      a
+      (recur b (mod a b)))))
+
+(defn lcm ^long [^long a ^long b]
+  (cond (zero? a) 0
+        (zero? b) 0
+        :else (/ (Math/abs (* a b))
+                 (gcd a b))))
+
+(deftest test-utils
+  (are [a b g] (= (gcd a b) g)
+       48 180 12
+       1 5 1
+       5 1 1)
+  (are [a b l] (= (lcm a b) l)
+       6 8 24
+       8 6 24
+       1 5 5
+       0 10 0))
+
+;;;; Functions to use as logic blocks
 
 (defn A
   [f1 e]

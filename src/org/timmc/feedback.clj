@@ -34,9 +34,9 @@
    
    The API consists of create, add, init, step, reset, read-register, read-wire,
    all-registers, and all-wires."
-  (:require [clojure.set :as set])
-  (:use [loom.graph :only (digraph)]
-        [loom.alg :only (topsort)]))
+  (:require [clojure.set :as set]
+            loom.graph
+            loom.alg))
 
 ;;;; Implementation
 
@@ -137,14 +137,14 @@
                   (if (seq deps)
                     deps
                     [bk])))]
-    (apply digraph (apply concat parts))))
+    (apply loom.graph/digraph (apply concat parts))))
 
 (defn- sorted-block-names
   "Return the names of blocks in an order appropriate for updating.
    Throw error if cycles detected."
   [^Pipeline p]
   (let [g (block-graph p)
-        sorted (reverse (topsort g))]
+        sorted (reverse (loom.alg/topsort g))]
     (when (nil? sorted)
       (throw (Exception. "Cycle detected in logic blocks. Add registers.")))
     sorted))
